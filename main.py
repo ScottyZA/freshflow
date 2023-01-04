@@ -1,19 +1,32 @@
 import sqlite3
+from datetime import datetime
 from fastapi import FastAPI
 from freshflow.schemas import Orders, Order
 
 app = FastAPI()
 
-database = sqlite3.connect('data.db')
+# This factory will be used to convert data from a Sqlite query to a Pydantic Model
+def dict_factory(cursor, row):
+    d = {}
+    for idx, col in enumerate(cursor.description):
+        d[col[0]] = row[idx]
+    return d
 
+database = sqlite3.connect('data.db')
+database.row_factory = dict_factory
 cursor = database.cursor()
 
 orders_query = """
 SELECT
     DISTINCT
     orderable_items.item_number,
-    ordering_day AS deadline,
-    delivery_day AS will_arrive_at
+    ordering_day,
+    delivery_day,
+    suggested_retail_price AS sales_price_suggestion,
+    orderable_items.purchase_price,
+    item_categories,
+    tags AS labels,
+    sales_predictions.sales_quantity
 FROM orderable_items
 LEFT JOIN inventory
 ON orderable_items.item_number = inventory.item_number
@@ -28,7 +41,8 @@ AND DATE(sales_predictions.day) = delivery_day;
 
 cursor.execute(orders_query)
 
-query_data = cursor.fetchall()
+# query_data = cursor.fetchall()
+query_data = cursor.fetchmany(5)
 
 database.commit()
 database.close()
@@ -38,7 +52,14 @@ async def root():
 
     orders = []
 
+    # With more time, I would make this loop more testable by seperating functions into their own utils file.
     for item in query_data:
-        orders.append(Order(item_number=item[0]))
+        order = Order.parse_obj(item)
+        order.profit_margin = order.sales_price_suggestion - order.purchase_price
 
+        # TODO: calculate the case, order and inventory data, ran out of time :(
+
+        orders.append(order)
+
+    # TODO: exclude 'sales_quantity' in response data (this was going to be used to calculate case quantity)
     return Orders(orders=orders)
