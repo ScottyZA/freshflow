@@ -41,8 +41,7 @@ AND DATE(sales_predictions.day) = delivery_day;
 
 cursor.execute(orders_query)
 
-# query_data = cursor.fetchall()
-query_data = cursor.fetchmany(5)
+query_data = cursor.fetchall()
 
 database.commit()
 database.close()
